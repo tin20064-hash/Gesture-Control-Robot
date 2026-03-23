@@ -1,88 +1,146 @@
 #include <SoftwareSerial.h>
+#include <Servo.h>
 
-SoftwareSerial BTSerial(2, 3); // Chân RX=2, TX=3 kết nối HC-05
+SoftwareSerial BTSerial(2, 3); // RX=2, TX=3
+Servo myservo;
 
-// Khai báo chân chiều quay L298N
-const int IN1 = 4;
-const int IN2 = 5;
-const int IN3 = 6;
-const int IN4 = 7;
+// Khai báo chân L298N
+const int IN1 = 4; const int IN2 = 5;
+const int IN3 = 6; const int IN4 = 7;
+const int ENA = 8; const int ENB = 9;
 
-// CẢNH BÁO: Chân 8 không có PWM, sẽ không điều chỉnh được tốc độ mượt mà
-const int ENA = 8; 
-const int ENB = 9; // Chân 9 có PWM (có dấu ~)
+// Khai báo chân cảm biến siêu âm
+const int TRIG_PIN = A2;
+const int ECHO_PIN = A3;
+const int SERVO_PIN = 10;
 
-// Nếu dùng chân 8, khuyên bạn nên để nguyên mức 255
-int tocDo = 255; 
+int tocDo = 200; // Giảm tốc độ một chút để xe né vật cản kịp
+bool isAutoMode = false;
 
 void setup() {
   pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
   pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
+  
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  
+  myservo.attach(SERVO_PIN);
+  myservo.write(90); // Cho servo nhìn thẳng
 
-  // Ép xe đứng im ngay khi vừa cấp nguồn
   dungIm();
-
   Serial.begin(9600);
-  BTSerial.begin(9600); 
-  Serial.println("XE DA SAN SANG! CHO LENH (F, B, L, R, S)...");
+  BTSerial.begin(9600);
+  Serial.println("HE THONG DA SAN SANG!");
 }
 
 void loop() {
+  // 1. Kiểm tra lệnh từ Bluetooth
   if (BTSerial.available()) {
-    char command = BTSerial.read(); 
-    
-    switch (command) {
-      case 'F': 
-        chayTien(); 
-        break;
-      case 'B': 
-        chayLui(); 
-        break;
-      case 'L': 
-        reTrai(); 
-        break;
-      case 'R': 
-        rePhai(); 
-        break;
-      case 'S': 
-        dungIm(); 
-        break;
-      default: 
-        break; 
+    char command = BTSerial.read();
+    if (command == 'a') {
+      isAutoMode = true;
+      Serial.println("CHE DO: TU DONG");
+    } else if (command == 's' || command == 'S') {
+      isAutoMode = false;
+      dungIm();
+      Serial.println("CHE DO: DIEU KHIEN TAY - DUNG");
+    } else if (!isAutoMode) {
+      handleManualCommand(command);
+    }
+  }
+
+  // 2. Nếu đang ở chế độ tự động
+  if (isAutoMode) {
+    long khoangCach = docKhoangCach();
+
+    if (khoangCach <= 15 && khoangCach > 0) { // Khoảng cách an toàn (nên để 15cm thay vì 5cm để xe kịp dừng)
+      dungIm();
+      delay(500);
+      chayLui(); // Lui lại một chút để có không gian quay
+      delay(300);
+      dungIm();
+      
+      handleAvoidance(); // Xử lý tìm đường
+    } else {
+      chayTien();
     }
   }
 }
 
-// --- CÁC HÀM XỬ LÝ CHUYỂN ĐỘNG ---
+// --- HÀM XỬ LÝ TRÁNH VẬT CẢN ---
+void handleAvoidance() {
+  int distanceLeft, distanceRight;
 
+  // Quay sang phải
+  myservo.write(10);
+  delay(500);
+  distanceRight = docKhoangCach();
+  
+  // Quay sang trái
+  myservo.write(170);
+  delay(500);
+  distanceLeft = docKhoangCach();
+  
+  // Trả về thẳng
+  myservo.write(90);
+  delay(500);
+
+  if (distanceLeft > distanceRight) {
+    reTrai();
+    delay(500); // Thời gian quay đủ để hướng xe sang trái
+  } else {
+    rePhai();
+    delay(500);
+  }
+  dungIm();
+}
+
+// --- HÀM ĐỌC KHOẢNG CÁCH ---
+long docKhoangCach() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  long distance = duration * 0.034 / 2;
+  return distance;
+}
+
+// --- ĐIỀU KHIỂN TAY ---
+void handleManualCommand(char cmd) {
+  switch (cmd) {
+    case 'F': chayTien(); break;
+    case 'B': chayLui(); break;
+    case 'L': reTrai(); break;
+    case 'R': rePhai(); break;
+    case 'S': dungIm(); break;
+  }
+}
+
+// --- CÁC HÀM DI CHUYỂN ---
 void chayTien() {
   analogWrite(ENA, tocDo); analogWrite(ENB, tocDo);
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  
-  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);  
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
 }
 void chayLui() {
   analogWrite(ENA, tocDo); analogWrite(ENB, tocDo);
-  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);  
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
 }
-
-void reTrai() { 
+void reTrai() {
+  analogWrite(ENA, tocDo); analogWrite(ENB, tocDo);
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH); // Quay bánh tại chỗ
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
+}
+void rePhai() {
   analogWrite(ENA, tocDo); analogWrite(ENB, tocDo);
   digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
-
 }
-
-void rePhai() { 
-  analogWrite(ENA, tocDo); analogWrite(ENB, tocDo);
-  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
-
-}
-
-void dungIm() { 
-  analogWrite(ENA, 0); analogWrite(ENB, 0);
+void dungIm() {
   digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
 }
