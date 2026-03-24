@@ -14,7 +14,7 @@ const int TRIG_PIN = A2;
 const int ECHO_PIN = A3;
 const int SERVO_PIN = 10;
 
-int tocDo = 200; // Giảm tốc độ một chút để xe né vật cản kịp
+int tocDo = 200; 
 bool isAutoMode = false;
 
 void setup() {
@@ -54,7 +54,7 @@ void loop() {
   if (isAutoMode) {
     long khoangCach = docKhoangCach();
 
-    if (khoangCach <= 15 && khoangCach > 0) { // Khoảng cách an toàn (nên để 15cm thay vì 5cm để xe kịp dừng)
+    if (khoangCach <= 15 && khoangCach > 0) { // Khoảng cách an toàn 
       dungIm();
       delay(500);
       chayLui(); // Lui lại một chút để có không gian quay
@@ -132,7 +132,7 @@ void chayLui() {
 }
 void reTrai() {
   analogWrite(ENA, tocDo); analogWrite(ENB, tocDo);
-  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH); // Quay bánh tại chỗ
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH); 
   digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
 }
 void rePhai() {
